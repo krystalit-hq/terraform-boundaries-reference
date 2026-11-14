@@ -1,24 +1,19 @@
 output "alb_dns_name" {
-  description = "DNS name of the public Application Load Balancer."
-  value       = aws_lb.app.dns_name
+  value = module.load_balancer.alb_dns_name
 }
 
 output "alb_url" {
-  description = "HTTP URL used for the smoke test."
-  value       = "http://${aws_lb.app.dns_name}"
+  value = "http://${module.load_balancer.alb_dns_name}"
 }
 
 output "ecs_cluster_name" {
-  description = "Name of the ECS cluster."
-  value       = aws_ecs_cluster.app.name
+  value = module.ecs_cluster.cluster_name
 }
 
 output "ecs_service_name" {
-  description = "Name of the ECS service."
-  value       = aws_ecs_service.app.name
+  value = module.ecs_service.service_name
 }
 
 output "log_group_name" {
-  description = "CloudWatch log group used by the task."
-  value       = aws_cloudwatch_log_group.app.name
+  value = module.log_group.log_group_name
 }

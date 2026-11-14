@@ -1,70 +1,35 @@
 # Decisions
 
-## Why ECS Fargate?
+## Why stage 02 has many modules
 
-The reference needs enough infrastructure relationships to make boundaries
-visible without turning into another serverless example.
+Because this is a common cleanup pattern:
 
-ECS gives us:
+```text
+large file
+→ extract resources
+→ create modules
+→ root file gets shorter
+→ declare victory
+```
 
-- network,
-- load balancing,
-- runtime,
-- identity,
-- logging.
+Stage 02 intentionally tests whether that cleanup actually reduces the context required to understand a change.
 
-That is enough structure to make the Terraform organization meaningful.
+The modules are not broken.
 
-## Why NGINX from Public ECR?
+They are shallow.
 
-Application code is not part of the experiment.
+Most represent AWS resource categories rather than architectural responsibilities.
 
-Using a public image removes build and registry lifecycle from the first
-version and keeps attention on infrastructure structure.
+## Why use moved blocks
 
-## Why no NAT Gateway?
+The experiment is about code organization, not rebuilding the workload.
 
-A NAT Gateway would add recurring cost and another networking concern without
-improving the lesson.
+Terraform `moved` blocks preserve the existing AWS objects while their Terraform addresses move from the root module into child modules.
 
-Tasks use public IP addresses for outbound image pulls. Inbound application
-traffic is still restricted to the ALB security group.
+This also documents migration intent in code instead of relying on manual `terraform state mv` commands.
 
-This is a deliberate reference trade-off, not a recommendation for every
-production ECS service.
+## Why keep runtime behavior unchanged
 
-## Why no ECR repository?
-
-An ECR repository would require a separate image build/push lifecycle before the
-ECS service becomes useful.
-
-That would distract from the Terraform boundary experiment.
-
-A future application can own that concern separately if needed.
-
-## Why one large `main.tf` first?
-
-Because stage 01 must be honestly functional before we introduce abstractions.
-
-Starting from a deliberately modular design would hide the actual question:
-
-> Which boundaries are useful, and which ones merely look organized?
-
-## Why no remote state backend?
-
-The state ownership model is outside this experiment.
-
-The repository should not pretend that one backend configuration is universal.
-
-## Why no custom modules in stage 01?
-
-Modules would prematurely answer the question the repository exists to explore.
-
-Stage 02 will introduce them intentionally.
-
-## Why keep the workload unchanged across stages?
-
-If infrastructure behavior changes together with Terraform structure, the
-comparison becomes weak.
+If infrastructure behavior changes together with Terraform structure, the comparison becomes weak.
 
 The strongest experiment changes structure while preserving what gets deployed.

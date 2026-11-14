@@ -1,108 +1,80 @@
-# Evolution plan
-
-The repository is an experiment in infrastructure structure.
+# Evolution
 
 ## Stage 01 — works
 
-Goal:
+One root module, direct references, no custom modules.
 
-> Build infrastructure that is valid, deployable and understandable at small
-> scale, but has too much shared context.
+Verified:
 
-Characteristics:
+```text
+HTTP → ALB → ECS Fargate → NGINX
+```
 
-- one root module,
-- most resources in `main.tf`,
-- direct references everywhere,
-- no custom modules,
-- deployment works.
+Terraform converged to:
 
-The important point is that nothing is technically wrong.
+```text
+No changes.
+```
+
+Nothing was technically wrong. That was the point.
 
 ## Stage 02 — abstraction trap
 
-Goal:
-
-> Apply a plausible but shallow cleanup: module boundaries based mainly on AWS
-> resource types.
-
-Likely modules:
+The same infrastructure is split into modules based mostly on AWS resource categories:
 
 ```text
-modules/
-  vpc/
-  security-group/
-  log-group/
-  iam-role/
-  load-balancer/
-  ecs-cluster/
-  ecs-service/
+vpc
+subnets
+routing
+security-groups
+log-group
+iam-role
+load-balancer
+ecs-cluster
+task-definition
+ecs-service
 ```
 
-Expected result:
+Every individual extraction looks reasonable.
 
-- Terraform still validates,
-- infrastructure still works,
-- root configuration becomes shorter,
-- module interfaces become wider,
-- values are passed through layers,
-- dependency direction becomes harder to follow,
-- ownership is still unclear.
+The problem appears only when the system is considered as a whole.
 
-This stage exists to demonstrate:
+The modules answer:
+
+```text
+What AWS resource is this?
+```
+
+They do not answer:
+
+```text
+What responsibility does this belong to?
+What changes together?
+Who owns the lifecycle?
+```
+
+The root module becomes shorter, but IDs and ARNs now travel through many module interfaces.
 
 > More modules do not automatically mean better boundaries.
 
 ## Stage 03 — bounded
 
-Goal:
-
-> Organize the same infrastructure around responsibilities and lifecycle.
-
-Possible shape:
+The final version will use a much smaller number of responsibility-oriented boundaries, likely around concerns such as:
 
 ```text
-infra/
-  versions.tf
-  providers.tf
-  variables.tf
-  locals.tf
-  network.tf
-  edge.tf
-  runtime.tf
-  identity.tf
-  observability.tf
-  outputs.tf
+network
+edge
+runtime
 ```
 
-Custom modules will only remain if a real reusable boundary emerges.
+Identity and observability will live where their lifecycle and ownership make sense instead of becoming modules only because AWS exposes separate service names.
 
-The final structure should make these questions easier to answer:
-
-- who owns this concern?
-- what changes together?
-- which direction does the dependency point?
-- what context does a reader need before changing it?
-- what can be replaced without understanding the entire stack?
-
-## Success criteria
-
-The experiment succeeds if all three versions can describe the same working
-system while making the cost of bad abstraction visible.
-
-The final conclusion should not be:
+The conclusion is not:
 
 ```text
 modules are bad
 ```
 
-or:
+It is:
 
-```text
-flat Terraform is always better
-```
-
-It should be:
-
-> Abstraction is useful when it represents a real boundary. Terraform cannot
-> discover that boundary for us.
+> Abstraction is useful when it represents a real boundary. Terraform cannot discover that boundary for us.

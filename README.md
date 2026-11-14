@@ -1,12 +1,10 @@
 # Terraform Boundaries Reference
 
-A small AWS reference showing that valid Terraform is not the same thing as
-well-structured infrastructure.
+A small AWS reference showing that valid Terraform is not the same thing as well-structured infrastructure.
 
-> **Terraform can describe infrastructure. It cannot decide where your
-> boundaries should be.**
+> **Terraform can describe infrastructure. It cannot decide where your boundaries should be.**
 
-This repository deliberately evolves the same workload through three stages:
+This repository evolves the same workload through three stages:
 
 ```text
 01-works
@@ -16,34 +14,27 @@ This repository deliberately evolves the same workload through three stages:
 03-bounded
 ```
 
-All stages are intended to describe the same application behavior.
-
-The experiment is not about whether Terraform can produce a valid plan.
-
-It is about what happens to understanding when structure changes.
-
 ## Current stage
 
-This initial version implements:
-
 ```text
-01-works
+02-abstraction-trap
 ```
 
-The infrastructure is intentionally kept in one root module and most resources
-live in one `main.tf`.
+Stage 01 proved that the deliberately flat configuration could deploy a working workload and converge to:
 
-It is not broken.
+```text
+No changes.
+```
 
-That is the point.
+Stage 02 now performs a plausible cleanup:
 
-The next stage will try to "clean it up" with resource-shaped modules and show
-how abstraction can increase indirection without creating useful boundaries.
+> Put infrastructure into modules.
 
-The final stage will reorganize around responsibilities and lifecycle rather
-than around AWS resource types.
+The catch is that the module boundaries mostly follow AWS resource categories rather than architectural responsibilities.
 
-## Architecture
+The result looks more organized. The question is whether it actually became easier to reason about.
+
+## Runtime architecture
 
 ```mermaid
 flowchart LR
@@ -59,134 +50,95 @@ flowchart LR
     Image --> ECS
 ```
 
-The workload is deliberately boring.
+The runtime architecture is intentionally unchanged.
 
-That keeps the focus on Terraform structure rather than application code.
-
-## What stage 01 proves
-
-Stage 01 should be able to:
+## Stage 02 structure
 
 ```text
-terraform init
-terraform validate
-terraform plan
-terraform apply
-curl <alb_dns_name>
-terraform destroy
+infra/
+├── main.tf
+├── moved.tf
+├── modules/
+│   ├── vpc/
+│   ├── subnets/
+│   ├── routing/
+│   ├── security-groups/
+│   ├── log-group/
+│   ├── iam-role/
+│   ├── load-balancer/
+│   ├── ecs-cluster/
+│   ├── task-definition/
+│   └── ecs-service/
+└── ...
 ```
 
-A successful deployment does **not** prove the Terraform is well structured.
+At first glance this is cleaner than stage 01.
 
-It only proves that the infrastructure can be created.
+The root module is shorter. Individual files are smaller. Resources are hidden behind names.
 
-## Planned comparison
+But the coupling did not disappear.
+
+It moved into module inputs, outputs and dependency wiring.
+
+## Refactoring without replacement
+
+Stage 02 uses Terraform `moved` blocks to transfer existing objects from their stage 01 root addresses into child-module addresses.
+
+The intended plan should show address moves without destroying and recreating the workload.
+
+After applying those state moves, the infrastructure should again converge to:
+
+```text
+No changes.
+```
+
+## Comparison
 
 | Stage | Works? | Terraform valid? | Structure | Main tension |
 | --- | --- | --- | --- | --- |
 | `stage/01-works` | yes | yes | one root module | too much shared context |
-| `stage/02-abstraction-trap` | yes | yes | many resource-shaped modules | indirection without ownership |
-| `main` (`03-bounded`) | yes | yes | responsibility-oriented structure | explicit boundaries |
+| `stage/02-abstraction-trap` | yes | yes | resource-shaped modules | indirection without ownership |
+| `main` (`03-bounded`) | planned | planned | responsibility-oriented boundaries | explicit ownership and dependency direction |
 
-The final repository will make these versions directly comparable.
-
-## Cost model
-
-This reference intentionally avoids:
-
-- NAT Gateway,
-- RDS,
-- EKS,
-- private service endpoints,
-- custom container registry,
-- multiple ECS services.
-
-Fargate tasks receive public IPs so they can pull the public container image
-without a NAT Gateway. Inbound traffic to tasks is still restricted to the ALB
-security group.
-
-This is a cost-conscious reference choice, not a universal production pattern.
-
-## Requirements
-
-- Terraform `>= 1.9`
-- AWS credentials
-- GNU Make
-- an AWS account where you can create VPC, ALB, ECS, IAM and CloudWatch
-  resources
-
-Default region:
-
-```text
-eu-central-1
-```
-
-## Usage
-
-Initialize:
+## Stage 02 verification
 
 ```bash
 make init
-```
-
-Format and validate:
-
-```bash
 make check
-```
-
-Review:
-
-```bash
 make plan
 ```
 
-Deploy:
+Review the plan carefully. We want:
+
+```text
+0 to add, 0 to change, 0 to destroy
+```
+
+plus resource-address moves.
+
+Then:
 
 ```bash
 make apply
+curl "$(terraform -chdir=infra output -raw alb_url)"
+make plan
 ```
 
-After apply:
+The final plan should again say:
 
-```bash
-terraform -chdir=infra output -raw alb_url
+```text
+No changes.
 ```
 
-Open that URL or use `curl`.
-
-When finished:
-
-```bash
-make destroy-plan
-make destroy
-```
-
-## Branch strategy
-
-After stage 01 has been deployed and verified, preserve it:
-
-```bash
-git branch stage/01-works
-git push origin stage/01-works
-```
-
-Then continue development on `main`.
-
-After the abstraction-trap version is verified, preserve that commit as:
+Then preserve this version:
 
 ```bash
 git branch stage/02-abstraction-trap
 git push origin stage/02-abstraction-trap
 ```
 
-`main` will eventually contain the final `03-bounded` version.
-
-This produces three directly browsable versions of the same infrastructure.
-
 ## Documentation
 
-- [`docs/architecture.md`](docs/architecture.md)
 - [`docs/evolution.md`](docs/evolution.md)
 - [`docs/decisions.md`](docs/decisions.md)
 
