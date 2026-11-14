@@ -1,8 +1,34 @@
+resource "aws_security_group" "alb" {
+  name        = "${var.name_prefix}-alb"
+  description = "Allow HTTP from the internet to the ALB."
+  vpc_id      = var.vpc_id
+
+  ingress {
+    description = "Public HTTP"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "Allow outbound traffic."
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.name_prefix}-alb"
+  }
+}
+
 resource "aws_lb" "app" {
   name               = substr("${var.name_prefix}-alb", 0, 32)
   internal           = false
   load_balancer_type = "application"
-  security_groups    = [var.security_group_id]
+  security_groups    = [aws_security_group.alb.id]
   subnets            = var.public_subnet_ids
 }
 

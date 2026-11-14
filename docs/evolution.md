@@ -1,26 +1,31 @@
 # Evolution
 
+This repository keeps the runtime workload stable while changing only the Terraform structure.
+
 ## Stage 01 — works
 
-One root module, direct references, no custom modules.
-
-Verified:
-
 ```text
-HTTP → ALB → ECS Fargate → NGINX
+1 root module
+0 custom modules
 ```
 
-Terraform converged to:
+The configuration was direct and easy to trace at small scale.
+
+It also concentrated unrelated concerns in one place.
+
+The workload deployed successfully and converged to:
 
 ```text
 No changes.
 ```
 
-Nothing was technically wrong. That was the point.
-
 ## Stage 02 — abstraction trap
 
-The same infrastructure is split into modules based mostly on AWS resource categories:
+```text
+10 custom modules
+```
+
+The configuration was split by AWS resource category:
 
 ```text
 vpc
@@ -35,31 +40,36 @@ task-definition
 ecs-service
 ```
 
-Every individual extraction looks reasonable.
+Every extraction was locally defensible.
 
-The problem appears only when the system is considered as a whole.
+Collectively, the modules created many interfaces without introducing clear ownership.
 
-The modules answer:
-
-```text
-What AWS resource is this?
-```
-
-They do not answer:
+The root module became shorter, but much of it was now glue:
 
 ```text
-What responsibility does this belong to?
-What changes together?
-Who owns the lifecycle?
+output from module A
+→ input to module B
+→ output from module B
+→ input to module C
 ```
 
-The root module becomes shorter, but IDs and ARNs now travel through many module interfaces.
+The infrastructure still worked.
 
-> More modules do not automatically mean better boundaries.
+Terraform still returned:
+
+```text
+No changes.
+```
+
+That was exactly the trap.
 
 ## Stage 03 — bounded
 
-The final version will use a much smaller number of responsibility-oriented boundaries, likely around concerns such as:
+```text
+3 custom modules
+```
+
+The final structure is organized around responsibility and lifecycle:
 
 ```text
 network
@@ -67,14 +77,71 @@ edge
 runtime
 ```
 
-Identity and observability will live where their lifecycle and ownership make sense instead of becoming modules only because AWS exposes separate service names.
+### Network
 
-The conclusion is not:
+Owns topology.
+
+It can change internally without requiring the caller to understand individual route tables, subnet associations or internet gateway resources.
+
+### Edge
+
+Owns the public entry point.
+
+The ALB security group, load balancer, target group and listener change as one concern.
+
+### Runtime
+
+Owns the workload.
+
+The ECS service, task definition, execution identity, logging and task-facing security group share the same operational lifecycle.
+
+## What improved
+
+The final design does not optimize for:
+
+```text
+fewest files
+most modules
+shortest root module
+maximum reuse
+```
+
+It optimizes for:
+
+```text
+local reasoning
+clear ownership
+stable interfaces
+visible dependency direction
+```
+
+The dependency direction is now intentionally small:
+
+```text
+network → edge → runtime
+    └────────→ runtime
+```
+
+The root module composes those responsibilities instead of reproducing AWS's service catalog.
+
+## Conclusion
+
+The experiment does not prove that:
+
+```text
+modules are good
+```
+
+or:
 
 ```text
 modules are bad
 ```
 
-It is:
+It demonstrates something narrower:
 
-> Abstraction is useful when it represents a real boundary. Terraform cannot discover that boundary for us.
+> A module is useful when it expresses a boundary that matters to the system.
+
+Terraform can enforce the graph after we choose the boundary.
+
+It cannot choose the boundary for us.

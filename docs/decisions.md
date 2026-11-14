@@ -1,35 +1,72 @@
 # Decisions
 
-## Why stage 02 has many modules
+## Why three modules?
 
-Because this is a common cleanup pattern:
+Not because three is inherently better than ten.
+
+The three modules correspond to responsibilities that have distinct reasons to change:
 
 ```text
-large file
-→ extract resources
-→ create modules
-→ root file gets shorter
-→ declare victory
+network
+edge
+runtime
 ```
 
-Stage 02 intentionally tests whether that cleanup actually reduces the context required to understand a change.
+They also create a dependency direction that is easy to explain.
 
-The modules are not broken.
+## Why identity lives in runtime
 
-They are shallow.
+The ECS task execution role exists because the workload needs to start and write logs.
 
-Most represent AWS resource categories rather than architectural responsibilities.
+Its lifecycle is tied to the runtime.
 
-## Why use moved blocks
+Creating an `iam-role` module simply because IAM is a separate AWS service did not create a useful architectural boundary.
 
-The experiment is about code organization, not rebuilding the workload.
+## Why CloudWatch Logs lives in runtime
 
-Terraform `moved` blocks preserve the existing AWS objects while their Terraform addresses move from the root module into child modules.
+The log group exists for this workload.
 
-This also documents migration intent in code instead of relying on manual `terraform state mv` commands.
+It is not a shared observability platform.
 
-## Why keep runtime behavior unchanged
+Treating it as an independent `log-group` module added an interface without creating independent ownership.
 
-If infrastructure behavior changes together with Terraform structure, the comparison becomes weak.
+## Why the ALB security group lives in edge
 
-The strongest experiment changes structure while preserving what gets deployed.
+It describes the public ingress policy of the load balancer.
+
+That is part of the edge responsibility.
+
+## Why the ECS security group lives in runtime
+
+It describes what may reach the workload.
+
+It consumes the ALB security group ID from edge, making the dependency direction explicit:
+
+```text
+edge → runtime
+```
+
+## Why networking remains its own module
+
+Network topology has a coherent lifecycle and is consumed by both edge and runtime.
+
+It provides a stable interface:
+
+- VPC ID
+- public subnet IDs
+
+Callers do not need to know which route tables or associations implement that topology.
+
+## Why moved blocks remain in the final repository
+
+They document how the same live infrastructure evolved between stages.
+
+They are part of the experiment's history, not temporary state surgery.
+
+## Why runtime behavior never changes
+
+The comparison is useful only if the workload remains equivalent.
+
+All three stages should continue to serve the same NGINX page through the same ALB and ECS service.
+
+The variable is Terraform structure, not application behavior.

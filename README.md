@@ -14,25 +14,31 @@ This repository evolves the same workload through three stages:
 03-bounded
 ```
 
-## Current stage
+All three stages describe the same runtime behavior.
+
+The experiment is not about whether Terraform can produce a valid plan.
+
+It is about how much context a human needs when the system changes.
+
+## Final stage
 
 ```text
-02-abstraction-trap
+03-bounded
 ```
 
-Stage 01 proved that the deliberately flat configuration could deploy a working workload and converge to:
+Stage 01 worked with one root module.
+
+Stage 02 introduced ten resource-shaped modules.
+
+Stage 03 keeps modules, but only where they represent a meaningful responsibility and lifecycle boundary.
+
+The final structure has three boundaries:
 
 ```text
-No changes.
+network
+edge
+runtime
 ```
-
-Stage 02 now performs a plausible cleanup:
-
-> Put infrastructure into modules.
-
-The catch is that the module boundaries mostly follow AWS resource categories rather than architectural responsibilities.
-
-The result looks more organized. The question is whether it actually became easier to reason about.
 
 ## Runtime architecture
 
@@ -50,73 +56,116 @@ flowchart LR
     Image --> ECS
 ```
 
-The runtime architecture is intentionally unchanged.
+The runtime architecture is unchanged from stages 01 and 02.
 
-## Stage 02 structure
+## Terraform architecture
 
-```text
-infra/
-├── main.tf
-├── moved.tf
-├── modules/
-│   ├── vpc/
-│   ├── subnets/
-│   ├── routing/
-│   ├── security-groups/
-│   ├── log-group/
-│   ├── iam-role/
-│   ├── load-balancer/
-│   ├── ecs-cluster/
-│   ├── task-definition/
-│   └── ecs-service/
-└── ...
+```mermaid
+flowchart LR
+    Root[Root composition]
+    Network[network]
+    Edge[edge]
+    Runtime[runtime]
+
+    Root --> Network
+    Root --> Edge
+    Root --> Runtime
+
+    Network --> Edge
+    Network --> Runtime
+    Edge --> Runtime
 ```
 
-At first glance this is cleaner than stage 01.
+### `network`
 
-The root module is shorter. Individual files are smaller. Resources are hidden behind names.
+Owns infrastructure whose lifecycle is primarily network topology:
 
-But the coupling did not disappear.
+- VPC
+- internet gateway
+- public subnets
+- public route table
+- route table associations
 
-It moved into module inputs, outputs and dependency wiring.
+### `edge`
 
-## Refactoring without replacement
+Owns the public entry point:
 
-Stage 02 uses Terraform `moved` blocks to transfer existing objects from their stage 01 root addresses into child-module addresses.
+- ALB security group
+- Application Load Balancer
+- target group
+- listener
 
-The intended plan should show address moves without destroying and recreating the workload.
+### `runtime`
 
-After applying those state moves, the infrastructure should again converge to:
+Owns the workload lifecycle:
+
+- ECS security group
+- ECS cluster
+- task execution IAM role
+- task definition
+- ECS service
+- CloudWatch log group
+
+Identity and logging intentionally live with the runtime instead of becoming separate modules merely because AWS exposes them as separate services.
+
+## Why this is different from stage 02
+
+Stage 02 asked:
 
 ```text
-No changes.
+What AWS resource category is this?
 ```
+
+Stage 03 asks:
+
+```text
+What responsibility owns this?
+What changes together?
+What does this component need to know about the rest of the system?
+```
+
+That reduces ten module boundaries to three without returning to one giant root module.
+
+The point is not that three is a magic number.
+
+The point is that each boundary now has a reason to exist.
 
 ## Comparison
 
-| Stage | Works? | Terraform valid? | Structure | Main tension |
-| --- | --- | --- | --- | --- |
-| `stage/01-works` | yes | yes | one root module | too much shared context |
-| `stage/02-abstraction-trap` | yes | yes | resource-shaped modules | indirection without ownership |
-| `main` (`03-bounded`) | planned | planned | responsibility-oriented boundaries | explicit ownership and dependency direction |
+| Stage | Works? | Terraform valid? | Custom modules | Organizing principle |
+| --- | --- | --- | ---: | --- |
+| `stage/01-works` | yes | yes | 0 | everything together |
+| `stage/02-abstraction-trap` | yes | yes | 10 | AWS resource categories |
+| `main` (`03-bounded`) | yes | yes | 3 | responsibility + lifecycle |
 
-## Stage 02 verification
+All three versions can produce a valid plan.
 
-```bash
-make init
-make check
-make plan
-```
+Only the structure changes.
 
-Review the plan carefully. We want:
+## Refactoring without replacement
+
+Stage 03 uses Terraform `moved` blocks again.
+
+Existing objects move from the ten stage 02 child modules into the three stage 03 responsibility-oriented modules.
+
+The intended migration plan is:
 
 ```text
 0 to add, 0 to change, 0 to destroy
 ```
 
-plus resource-address moves.
+with address moves only.
 
-Then:
+## Verification
+
+```bash
+make init
+make fmt
+make check
+make plan
+```
+
+If the plan contains only moved addresses:
 
 ```bash
 make apply
@@ -124,23 +173,23 @@ curl "$(terraform -chdir=infra output -raw alb_url)"
 make plan
 ```
 
-The final plan should again say:
+The final plan should return:
 
 ```text
 No changes.
 ```
 
-Then preserve this version:
+## The point
 
-```bash
-git branch stage/02-abstraction-trap
-git push origin stage/02-abstraction-trap
-```
+Terraform can tell us whether configuration and infrastructure agree.
 
-## Documentation
+It cannot tell us whether the configuration is easy to understand.
 
-- [`docs/evolution.md`](docs/evolution.md)
-- [`docs/decisions.md`](docs/decisions.md)
+It can validate syntax, construct a dependency graph and calculate a plan.
+
+It cannot decide whether `iam-role` deserves to be a module.
+
+That part still belongs to architecture.
 
 ---
 
